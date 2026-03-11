@@ -416,7 +416,7 @@ class BudgetData:
 
 @dataclass(frozen=True, slots=True)
 class GoalsData:
-    """Goals V2 data from get_budgets response.
+    """Goals data from goalsV2 (legacy) and/or savingsGoals (new system).
 
     Computes remaining = planned - actual for each month across all goals.
     """
@@ -424,7 +424,7 @@ class GoalsData:
     remaining_by_month: dict[str, float]
 
     @classmethod
-    def from_api(cls, data: dict[str, Any]) -> GoalsData:
+    def from_goals_v2_api(cls, data: dict[str, Any]) -> GoalsData:
         """Parse goalsV2 from get_budgets response and compute remaining per month."""
         goals_raw = data.get("goalsV2") or []
         remaining_by_month: dict[str, float] = {}
@@ -461,6 +461,32 @@ class GoalsData:
                 )
 
         return cls(remaining_by_month=remaining_by_month)
+
+    @classmethod
+    def from_savings_goals_api(cls, data: dict[str, Any]) -> GoalsData:
+        """Parse savingsGoalMonthlyBudgetAmounts response (Savings Goals - new system)."""
+        amounts_raw = data.get("savingsGoalMonthlyBudgetAmounts") or []
+        remaining_by_month: dict[str, float] = {}
+
+        for item in amounts_raw:
+            monthly_amounts = item.get("monthlyAmounts") or []
+            for ma in monthly_amounts:
+                month_str = ma.get("month") or ""
+                month_key = month_str[:7] if len(month_str) >= 7 else month_str
+                remaining = ma.get("remainingAmount")
+                if month_key and remaining is not None:
+                    remaining_by_month[month_key] = (
+                        remaining_by_month.get(month_key, 0.0) + remaining
+                    )
+
+        return cls(remaining_by_month=remaining_by_month)
+
+    def merge(self, other: GoalsData) -> GoalsData:
+        """Merge remaining amounts from another GoalsData (adds for same month)."""
+        merged = dict(self.remaining_by_month)
+        for month_key, remaining in other.remaining_by_month.items():
+            merged[month_key] = merged.get(month_key, 0.0) + remaining
+        return GoalsData(remaining_by_month=merged)
 
 
 # ---------------------------------------------------------------------------

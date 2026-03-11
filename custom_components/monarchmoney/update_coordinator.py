@@ -16,6 +16,7 @@ from homeassistant.const import (
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import ConfigEntryAuthFailed
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
+from gql import gql
 from monarchmoney import MonarchMoney, RequireMFAException
 
 from .const import (
@@ -194,7 +195,14 @@ class MonarchCoordinator(DataUpdateCoordinator[MonarchData]):
         data.cashflow = CashflowData.from_api(cashflow_raw or {})
         data.budget_raw = budgets_raw
         data.budget = BudgetData.from_api(budgets_raw or {})
-        data.goals = GoalsData.from_api(budgets_raw or {})
+
+        # Goals: merge goalsV2 (legacy) + savingsGoals (new system)
+        goals_v2 = GoalsData.from_goals_v2_api(budgets_raw or {})
+        savings_goals_raw = await self._fetch_savings_goals_budget_amounts(
+            budget_start, budget_end
+        )
+        savings_goals = GoalsData.from_savings_goals_api(savings_goals_raw or {})
+        data.goals = goals_v2.merge(savings_goals)
         _LOGGER.debug(
             "Fetched %d accounts, %d categories from API",
             len(data.accounts),
@@ -274,6 +282,38 @@ class MonarchCoordinator(DataUpdateCoordinator[MonarchData]):
                 )
 
         return data
+
+    async def _fetch_savings_goals_budget_amounts(
+        self, start_date: str, end_date: str
+    ) -> dict | None:
+        """Fetch Savings Goals monthly budget amounts (new goal system)."""
+        query = gql(
+            """
+            query GetSavingsGoalMonthlyBudgetAmounts($startMonth: Date!, $endMonth: Date!) {
+                savingsGoalMonthlyBudgetAmounts(startMonth: $startMonth, endMonth: $endMonth) {
+                    savingsGoal {
+                        id
+                        name
+                    }
+                    monthlyAmounts {
+                        month
+                        plannedAmount
+                        actualAmount
+                        remainingAmount
+                    }
+                }
+            }
+            """
+        )
+        try:
+            return await self._api.gql_call(
+                operation="GetSavingsGoalMonthlyBudgetAmounts",
+                graphql_query=query,
+                variables={"startMonth": start_date, "endMonth": end_date},
+            )
+        except Exception as err:
+            _LOGGER.warning("Failed to fetch savings goals: %s", err)
+            return None
 
     @staticmethod
     def _is_auth_error(err: Exception) -> bool:

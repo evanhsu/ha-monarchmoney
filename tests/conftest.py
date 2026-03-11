@@ -79,6 +79,10 @@ def mock_monarch_api():
     )
     api.get_cashflow = AsyncMock(return_value=MOCK_CASHFLOW_RESPONSE)
     api.get_budgets = AsyncMock(return_value=MOCK_BUDGETS_RESPONSE)
+    # gql_call used for savingsGoalMonthlyBudgetAmounts (Savings Goals)
+    api.gql_call = AsyncMock(
+        return_value={"savingsGoalMonthlyBudgetAmounts": []}
+    )
 
     # Optional data endpoints
     api.get_credit_history = AsyncMock(

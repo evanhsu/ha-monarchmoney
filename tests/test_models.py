@@ -250,18 +250,18 @@ class TestBudgetData:
 
 
 class TestGoalsData:
-    def test_from_api(self) -> None:
-        gd = GoalsData.from_api(MOCK_BUDGETS_RESPONSE)
+    def test_from_goals_v2_api(self) -> None:
+        gd = GoalsData.from_goals_v2_api(MOCK_BUDGETS_RESPONSE)
         # Emergency Fund: planned 500 - actual 200 = 300 remaining
         assert "2026-03" in gd.remaining_by_month
         assert gd.remaining_by_month["2026-03"] == 300.0
 
     def test_empty_goals(self) -> None:
-        gd = GoalsData.from_api({"goalsV2": []})
+        gd = GoalsData.from_goals_v2_api({"goalsV2": []})
         assert gd.remaining_by_month == {}
 
     def test_skips_archived_goals(self) -> None:
-        gd = GoalsData.from_api({
+        gd = GoalsData.from_goals_v2_api({
             "goalsV2": [
                 {
                     "id": "g1",
@@ -273,6 +273,44 @@ class TestGoalsData:
             ],
         })
         assert gd.remaining_by_month == {}
+
+    def test_from_savings_goals_api(self) -> None:
+        data = {
+            "savingsGoalMonthlyBudgetAmounts": [
+                {
+                    "savingsGoal": {"id": "sg1", "name": "Fund Roth IRAs"},
+                    "monthlyAmounts": [
+                        {
+                            "month": "2026-03-01",
+                            "plannedAmount": 500.0,
+                            "actualAmount": 200.0,
+                            "remainingAmount": 300.0,
+                        },
+                    ],
+                },
+                {
+                    "savingsGoal": {"id": "sg2", "name": "Fund Emergency"},
+                    "monthlyAmounts": [
+                        {
+                            "month": "2026-03-01",
+                            "plannedAmount": 200.0,
+                            "actualAmount": 0.0,
+                            "remainingAmount": 200.0,
+                        },
+                    ],
+                },
+            ],
+        }
+        gd = GoalsData.from_savings_goals_api(data)
+        assert "2026-03" in gd.remaining_by_month
+        assert gd.remaining_by_month["2026-03"] == 500.0  # 300 + 200
+
+    def test_merge(self) -> None:
+        a = GoalsData(remaining_by_month={"2026-03": 100.0})
+        b = GoalsData(remaining_by_month={"2026-03": 50.0, "2026-04": 75.0})
+        merged = a.merge(b)
+        assert merged.remaining_by_month["2026-03"] == 150.0
+        assert merged.remaining_by_month["2026-04"] == 75.0
 
 
 # ---------------------------------------------------------------------------
