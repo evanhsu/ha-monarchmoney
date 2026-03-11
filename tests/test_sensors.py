@@ -121,6 +121,22 @@ def test_category_sensor_credit_sum():
     assert credit[0].display_balance == 1500.75
 
 
+def test_checking_balance_sensor_filters_by_subtype():
+    """Checking balance sensor sums only depository accounts with subtype checking."""
+    accounts = _parse_accounts()
+    matching = [
+        a
+        for a in accounts
+        if a.account_type.name == "depository"
+        and a.subtype is not None
+        and a.subtype.name == "checking"
+        and not a.is_hidden
+    ]
+    # Primary Checking (5432.10) only; Hidden Checking is excluded by is_hidden
+    assert len(matching) == 1
+    assert matching[0].display_balance == 5432.10
+
+
 # ---------------------------------------------------------------------------
 # Cashflow / Income / Expense
 # ---------------------------------------------------------------------------

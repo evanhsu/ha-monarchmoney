@@ -18,6 +18,7 @@ from custom_components.monarchmoney.const import (
 
 from .const import (
     MOCK_ACCOUNTS_RESPONSE,
+    MOCK_BUDGETS_RESPONSE,
     MOCK_CASHFLOW_RESPONSE,
     MOCK_CATEGORIES_RESPONSE,
     MOCK_CREDIT_RESPONSE,
@@ -77,6 +78,7 @@ def mock_monarch_api():
         return_value=MOCK_CATEGORIES_RESPONSE
     )
     api.get_cashflow = AsyncMock(return_value=MOCK_CASHFLOW_RESPONSE)
+    api.get_budgets = AsyncMock(return_value=MOCK_BUDGETS_RESPONSE)
 
     # Optional data endpoints
     api.get_credit_history = AsyncMock(

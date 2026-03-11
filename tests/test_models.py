@@ -6,6 +6,8 @@ from custom_components.monarchmoney.models import (
     Account,
     AccountHoldings,
     AccountType,
+    BudgetData,
+    BudgetMonthTotals,
     CashflowData,
     CreditHistory,
     Holding,
@@ -17,6 +19,7 @@ from custom_components.monarchmoney.models import (
 )
 from tests.const import (
     MOCK_ACCOUNTS_RESPONSE,
+    MOCK_BUDGETS_RESPONSE,
     MOCK_CASHFLOW_RESPONSE,
     MOCK_CATEGORIES_RESPONSE,
     MOCK_CREDIT_RESPONSE,
@@ -38,6 +41,8 @@ class TestAccountFromApi:
         assert a.display_name == "Primary Checking"
         assert a.display_balance == 5432.10
         assert a.account_type.name == "depository"
+        assert a.subtype is not None
+        assert a.subtype.name == "checking"
         assert a.institution.name == "Test Bank"
         assert a.include_in_net_worth is True
         assert a.is_hidden is False
@@ -48,6 +53,7 @@ class TestAccountFromApi:
         assert a.id == ""
         assert a.display_name == ""
         assert a.account_type.name == ""
+        assert a.subtype is None
         assert a.institution.name == ""
 
     def test_none_credential(self) -> None:
@@ -212,6 +218,37 @@ class TestRecurringTransaction:
 
 
 # ---------------------------------------------------------------------------
+# Budget models
+# ---------------------------------------------------------------------------
+
+
+class TestBudgetMonthTotals:
+    def test_from_api(self) -> None:
+        raw = MOCK_BUDGETS_RESPONSE["budgetData"]["totalsByMonth"][0]
+        t = BudgetMonthTotals.from_api(raw)
+        assert t.month == "2026-03"
+        assert t.remaining_fixed == 700.00
+        assert t.remaining_flexible == 750.00
+        assert t.remaining_non_monthly == 300.00
+        assert t.planned_fixed == 2500.00
+        assert t.actual_fixed == 1800.00
+
+
+class TestBudgetData:
+    def test_from_api(self) -> None:
+        bd = BudgetData.from_api(MOCK_BUDGETS_RESPONSE)
+        assert "2026-03" in bd.totals_by_month
+        totals = bd.totals_by_month["2026-03"]
+        assert totals.remaining_fixed == 700.00
+        assert totals.remaining_flexible == 750.00
+        assert totals.remaining_non_monthly == 300.00
+
+    def test_empty_response(self) -> None:
+        bd = BudgetData.from_api({})
+        assert bd.totals_by_month == {}
+
+
+# ---------------------------------------------------------------------------
 # MonarchData container
 # ---------------------------------------------------------------------------
 
@@ -224,3 +261,4 @@ class TestMonarchData:
         assert d.credit_history is None
         assert d.holdings == []
         assert d.recurring == []
+        assert d.budget is None

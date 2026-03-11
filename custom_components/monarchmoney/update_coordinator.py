@@ -32,6 +32,7 @@ from .const import (
 from .models import (
     Account,
     AccountHoldings,
+    BudgetData,
     CashflowData,
     CreditHistory,
     MonarchData,
@@ -165,11 +166,21 @@ class MonarchCoordinator(DataUpdateCoordinator[MonarchData]):
         data = MonarchData()
         options = self.config_entry.options
 
+        # Budget date range: current month
+        today = date.today()
+        budget_start = today.replace(day=1).strftime("%Y-%m-%d")
+        _, last_day = cal_module.monthrange(today.year, today.month)
+        budget_end = today.replace(day=last_day).strftime("%Y-%m-%d")
+
         # Core data (always fetched in parallel)
-        accounts_raw, categories_raw, cashflow_raw = await asyncio.gather(
+        accounts_raw, categories_raw, cashflow_raw, budgets_raw = await asyncio.gather(
             self._api.get_accounts(),
             self._api.get_transaction_categories(),
             self._api.get_cashflow(),
+            self._api.get_budgets(
+                start_date=budget_start,
+                end_date=budget_end,
+            ),
         )
 
         data.accounts = [
@@ -180,6 +191,7 @@ class MonarchCoordinator(DataUpdateCoordinator[MonarchData]):
             for c in categories_raw.get("categories") or []
         ]
         data.cashflow = CashflowData.from_api(cashflow_raw or {})
+        data.budget = BudgetData.from_api(budgets_raw or {})
         _LOGGER.debug(
             "Fetched %d accounts, %d categories from API",
             len(data.accounts),

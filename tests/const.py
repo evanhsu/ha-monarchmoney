@@ -302,6 +302,39 @@ MOCK_RECURRING_RESPONSE: dict = {
 }
 
 # ---------------------------------------------------------------------------
+# MOCK_BUDGETS_RESPONSE
+# ---------------------------------------------------------------------------
+# Matches get_budgets() response shape:
+#   budgetData.totalsByMonth[].{month, totalFixedExpenses, totalFlexibleExpenses, totalNonMonthlyExpenses}
+MOCK_BUDGETS_RESPONSE: dict = {
+    "budgetData": {
+        "totalsByMonth": [
+            {
+                "month": "2026-03",
+                "totalFixedExpenses": {
+                    "plannedAmount": 2500.00,
+                    "actualAmount": 1800.00,
+                    "remainingAmount": 700.00,
+                    "previousMonthRolloverAmount": 0.0,
+                },
+                "totalFlexibleExpenses": {
+                    "plannedAmount": 1200.00,
+                    "actualAmount": 450.00,
+                    "remainingAmount": 750.00,
+                    "previousMonthRolloverAmount": 0.0,
+                },
+                "totalNonMonthlyExpenses": {
+                    "plannedAmount": 500.00,
+                    "actualAmount": 200.00,
+                    "remainingAmount": 300.00,
+                    "previousMonthRolloverAmount": 0.0,
+                },
+            },
+        ]
+    }
+}
+
+# ---------------------------------------------------------------------------
 # MOCK_HOLDINGS_RESPONSE
 # ---------------------------------------------------------------------------
 # Matches get_account_holdings(id) response shape:

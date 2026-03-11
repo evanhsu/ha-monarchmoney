@@ -27,6 +27,20 @@ class AccountType:
 
 
 @dataclass(frozen=True, slots=True)
+class AccountSubtype:
+    """Account subtype (e.g. checking, savings)."""
+
+    name: str
+
+    @classmethod
+    def from_api(cls, data: dict[str, Any] | None) -> AccountSubtype | None:
+        if not data:
+            return None
+        name = data.get("name", "")
+        return cls(name=name) if name else None
+
+
+@dataclass(frozen=True, slots=True)
 class Institution:
     """Financial institution linked to an account."""
 
@@ -45,6 +59,7 @@ class Account:
     display_name: str
     display_balance: float
     account_type: AccountType
+    subtype: AccountSubtype | None
     institution: Institution
     updated_at: str
     include_in_net_worth: bool
@@ -54,6 +69,7 @@ class Account:
     @classmethod
     def from_api(cls, data: dict[str, Any]) -> Account:
         type_data = data.get("type") or {}
+        subtype_data = data.get("subtype")
         cred = data.get("credential") or {}
         inst_data = cred.get("institution") or {}
         return cls(
@@ -61,6 +77,7 @@ class Account:
             display_name=data.get("displayName", ""),
             display_balance=data.get("displayBalance", 0.0),
             account_type=AccountType.from_api(type_data),
+            subtype=AccountSubtype.from_api(subtype_data) if subtype_data else None,
             institution=Institution.from_api(inst_data),
             updated_at=data.get("updatedAt", ""),
             include_in_net_worth=data.get("includeInNetWorth", False),
@@ -336,6 +353,62 @@ class RecurringTransaction:
 
 
 # ---------------------------------------------------------------------------
+# Budget models
+# ---------------------------------------------------------------------------
+
+@dataclass(frozen=True, slots=True)
+class BudgetMonthTotals:
+    """Budget totals for a single month."""
+
+    month: str
+    remaining_fixed: float
+    remaining_flexible: float
+    remaining_non_monthly: float
+    planned_fixed: float
+    planned_flexible: float
+    planned_non_monthly: float
+    actual_fixed: float
+    actual_flexible: float
+    actual_non_monthly: float
+
+    @classmethod
+    def from_api(cls, data: dict[str, Any]) -> BudgetMonthTotals:
+        fixed = data.get("totalFixedExpenses") or {}
+        flexible = data.get("totalFlexibleExpenses") or {}
+        non_monthly = data.get("totalNonMonthlyExpenses") or {}
+        return cls(
+            month=data.get("month", ""),
+            remaining_fixed=fixed.get("remainingAmount", 0.0),
+            remaining_flexible=flexible.get("remainingAmount", 0.0),
+            remaining_non_monthly=non_monthly.get("remainingAmount", 0.0),
+            planned_fixed=fixed.get("plannedAmount", 0.0),
+            planned_flexible=flexible.get("plannedAmount", 0.0),
+            planned_non_monthly=non_monthly.get("plannedAmount", 0.0),
+            actual_fixed=fixed.get("actualAmount", 0.0),
+            actual_flexible=flexible.get("actualAmount", 0.0),
+            actual_non_monthly=non_monthly.get("actualAmount", 0.0),
+        )
+
+
+@dataclass(frozen=True, slots=True)
+class BudgetData:
+    """Budget data response wrapper."""
+
+    totals_by_month: dict[str, BudgetMonthTotals]
+
+    @classmethod
+    def from_api(cls, data: dict[str, Any]) -> BudgetData:
+        budget_data = data.get("budgetData") or {}
+        totals_raw = budget_data.get("totalsByMonth") or []
+        totals_by_month: dict[str, BudgetMonthTotals] = {}
+        for item in totals_raw:
+            month_totals = BudgetMonthTotals.from_api(item)
+            if month_totals.month:
+                totals_by_month[month_totals.month] = month_totals
+        return cls(totals_by_month=totals_by_month)
+
+
+# ---------------------------------------------------------------------------
 # Top-level data container (mutable — built incrementally by coordinator)
 # ---------------------------------------------------------------------------
 
@@ -353,3 +426,4 @@ class MonarchData:
     credit_history: CreditHistory | None = None
     holdings: list[AccountHoldings] = field(default_factory=list)
     recurring: list[RecurringTransaction] = field(default_factory=list)
+    budget: BudgetData | None = None
