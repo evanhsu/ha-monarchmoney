@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import logging
+from dataclasses import dataclass
 from datetime import datetime
 from typing import Any
 
@@ -26,6 +27,7 @@ class MonarchMoneyCheckingBalanceSensor(MonarchSensorEntity):
         """Initialize the checking balance sensor."""
         super().__init__(coordinator, unique_id)
         self._account_data: dict[str, Any] = {}
+        self._percentage_of_required_balance: float | None = None
         self._attr_name = "Checking Balance"
         self._attr_unique_id = f"{DOMAIN}_{unique_id}_checking_balance"
         self._attr_icon = "mdi:bank"
@@ -69,6 +71,16 @@ class MonarchMoneyCheckingBalanceSensor(MonarchSensorEntity):
         except (TypeError, ValueError):
             self._state = 0
 
+        # Percentage of required checking balance (0-100)
+        required = _get_required_checking_balance(self.coordinator)
+        if required.total > 0 and self._state is not None:
+            pct = min(100.0, max(0.0, (self._state / required.total) * 100))
+            self._percentage_of_required_balance = round(pct, 1)
+        else:
+            self._percentage_of_required_balance = (
+                100.0 if (self._state and self._state > 0) else None
+            )
+
         self.async_write_ha_state()
 
     async def async_added_to_hass(self) -> None:
@@ -80,7 +92,10 @@ class MonarchMoneyCheckingBalanceSensor(MonarchSensorEntity):
     @property
     def extra_state_attributes(self) -> dict[str, Any]:
         """Return the state attributes of the sensor."""
-        return self._account_data
+        attrs = dict(self._account_data)
+        if self._percentage_of_required_balance is not None:
+            attrs["percentage_of_required_balance"] = self._percentage_of_required_balance
+        return attrs
 
 
 def _get_current_month_totals(coordinator: MonarchCoordinator) -> Any:
@@ -92,6 +107,49 @@ def _get_current_month_totals(coordinator: MonarchCoordinator) -> Any:
     return data.budget.totals_by_month.get(current_month)
 
 
+@dataclass
+class RequiredCheckingBalance:
+    """Required checking balance and its component breakdown."""
+
+    total: float
+    credit_card_balance: float
+    budget_fixed_remaining: float
+    budget_flexible_remaining: float
+    goals_remaining: float
+
+
+def _get_required_checking_balance(coordinator: MonarchCoordinator) -> RequiredCheckingBalance:
+    """Get required checking balance (credit cards + fixed + flexible + goals remaining)."""
+    data = coordinator.data
+    if not data:
+        return RequiredCheckingBalance(0.0, 0.0, 0.0, 0.0, 0.0)
+    credit_accounts = [
+        a
+        for a in data.accounts
+        if a.account_type.name == "credit" and not a.is_hidden
+    ]
+    try:
+        credit_balance = sum(
+            a.display_balance
+            for a in credit_accounts
+            if a.display_balance is not None
+        )
+    except (TypeError, ValueError):
+        credit_balance = 0.0
+    totals = _get_current_month_totals(coordinator)
+    fixed_remaining = totals.remaining_fixed if totals else 0.0
+    flexible_remaining = totals.remaining_flexible if totals else 0.0
+    goals_remaining = _get_goals_remaining(coordinator)
+    total = credit_balance + fixed_remaining + flexible_remaining + goals_remaining
+    return RequiredCheckingBalance(
+        total=total,
+        credit_card_balance=round(credit_balance, 2),
+        budget_fixed_remaining=round(fixed_remaining, 2),
+        budget_flexible_remaining=round(flexible_remaining, 2),
+        goals_remaining=round(goals_remaining, 2),
+    )
+
+
 def _get_goals_remaining(coordinator: MonarchCoordinator) -> float:
     """Get sum of goals remaining for the current month."""
     data = coordinator.data
@@ -99,6 +157,29 @@ def _get_goals_remaining(coordinator: MonarchCoordinator) -> float:
         return 0.0
     current_month = datetime.now().strftime("%Y-%m")
     return data.goals.remaining_by_month.get(current_month, 0.0)
+
+
+def _get_checking_balance(coordinator: MonarchCoordinator) -> float:
+    """Get sum of depository accounts with subtype checking."""
+    data = coordinator.data
+    if not data:
+        return 0.0
+    matching = [
+        a
+        for a in data.accounts
+        if a.account_type.name == "depository"
+        and a.subtype is not None
+        and a.subtype.name == "checking"
+        and not a.is_hidden
+    ]
+    try:
+        return sum(
+            a.display_balance
+            for a in matching
+            if a.display_balance is not None
+        )
+    except (TypeError, ValueError):
+        return 0.0
 
 
 class MonarchMoneyBudgetFixedRemainingSensor(MonarchSensorEntity):
@@ -269,10 +350,7 @@ class MonarchMoneyRequiredCheckingBalanceSensor(MonarchSensorEntity):
     def __init__(self, coordinator: MonarchCoordinator, unique_id: str) -> None:
         """Initialize the required checking balance sensor."""
         super().__init__(coordinator, unique_id)
-        self._credit_card_balance: float | None = None
-        self._budget_fixed_remaining: float | None = None
-        self._budget_flexible_remaining: float | None = None
-        self._goals_remaining: float | None = None
+        self._required: RequiredCheckingBalance | None = None
         self._attr_name = "Required Checking Balance"
         self._attr_unique_id = f"{DOMAIN}_{unique_id}_required_checking_balance"
         self._attr_icon = "mdi:bank-transfer"
@@ -280,50 +358,8 @@ class MonarchMoneyRequiredCheckingBalanceSensor(MonarchSensorEntity):
     @callback
     def _handle_coordinator_update(self) -> None:
         """Handle updated data from the coordinator."""
-        data = self.coordinator.data
-        if not data:
-            return
-
-        # Credit card balance: sum of credit accounts
-        credit_accounts = [
-            a
-            for a in data.accounts
-            if a.account_type.name == "credit" and not a.is_hidden
-        ]
-        try:
-            credit_balance = round(
-                sum(
-                    a.display_balance
-                    for a in credit_accounts
-                    if a.display_balance is not None
-                ),
-                2,
-            )
-        except (TypeError, ValueError):
-            credit_balance = 0.0
-
-        self._credit_card_balance = credit_balance
-
-        # Budget remaining for fixed and flexible
-        totals = _get_current_month_totals(self.coordinator)
-        fixed_remaining = totals.remaining_fixed if totals else 0.0
-        flexible_remaining = totals.remaining_flexible if totals else 0.0
-
-        # Goals remaining
-        goals_remaining = _get_goals_remaining(self.coordinator)
-
-        self._budget_fixed_remaining = round(fixed_remaining, 2)
-        self._budget_flexible_remaining = round(flexible_remaining, 2)
-        self._goals_remaining = round(goals_remaining, 2)
-
-        self._state = round(
-            credit_balance
-            + fixed_remaining
-            + flexible_remaining
-            + goals_remaining,
-            2,
-        )
-
+        self._required = _get_required_checking_balance(self.coordinator)
+        self._state = round(self._required.total, 2)
         self.async_write_ha_state()
 
     async def async_added_to_hass(self) -> None:
@@ -335,11 +371,16 @@ class MonarchMoneyRequiredCheckingBalanceSensor(MonarchSensorEntity):
     @property
     def extra_state_attributes(self) -> dict[str, Any]:
         """Return the state attributes of the sensor."""
+        if self._required is None:
+            return {}
+        checking_balance = _get_checking_balance(self.coordinator)
+        deficit = max(0, round(self._required.total - checking_balance, 2))
         return {
-            "credit_card_balance": self._credit_card_balance,
-            "budget_fixed_remaining": self._budget_fixed_remaining,
-            "budget_flexible_remaining": self._budget_flexible_remaining,
-            "goals_remaining": self._goals_remaining,
+            "credit_card_balance": self._required.credit_card_balance,
+            "budget_fixed_remaining": self._required.budget_fixed_remaining,
+            "budget_flexible_remaining": self._required.budget_flexible_remaining,
+            "goals_remaining": self._required.goals_remaining,
+            "checking_balance_deficit": deficit,
         }
 
 
