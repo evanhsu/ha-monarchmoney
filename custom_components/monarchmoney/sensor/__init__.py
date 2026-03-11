@@ -18,6 +18,7 @@ from ..const import (
 )
 from ..update_coordinator import MonarchCoordinator
 from .budget import (
+    MonarchMoneyBudgetDebugSensor,
     MonarchMoneyBudgetFixedRemainingSensor,
     MonarchMoneyBudgetFlexibleRemainingSensor,
     MonarchMoneyBudgetNonMonthlyRemainingSensor,
@@ -73,6 +74,7 @@ async def async_setup_entry(
     sensors.append(MonarchMoneyBudgetFlexibleRemainingSensor(coordinator, unique_id))
     sensors.append(MonarchMoneyBudgetNonMonthlyRemainingSensor(coordinator, unique_id))
     sensors.append(MonarchMoneyRequiredCheckingBalanceSensor(coordinator, unique_id))
+    sensors.append(MonarchMoneyBudgetDebugSensor(coordinator, unique_id))
 
     # Migrate: remove legacy cashflow entities renamed to *_this_month
     ent_reg = er.async_get(hass)

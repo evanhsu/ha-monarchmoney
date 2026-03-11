@@ -2,15 +2,21 @@
 
 from __future__ import annotations
 
+import json
+import logging
 from datetime import datetime
 from typing import Any
 
+from homeassistant.components.sensor import SensorEntity
 from homeassistant.core import callback
 
 from ..const import DOMAIN
+from ..entity import MonarchEntity
 from ..update_coordinator import MonarchCoordinator
 from ..util import format_date
 from .base import MonarchSensorEntity
+
+_LOGGER = logging.getLogger(__name__)
 
 
 class MonarchMoneyCheckingBalanceSensor(MonarchSensorEntity):
@@ -292,3 +298,44 @@ class MonarchMoneyRequiredCheckingBalanceSensor(MonarchSensorEntity):
             "budget_fixed_remaining": self._budget_fixed_remaining,
             "budget_flexible_remaining": self._budget_flexible_remaining,
         }
+
+
+class MonarchMoneyBudgetDebugSensor(MonarchEntity, SensorEntity):
+    """Debug sensor exposing raw get_budgets API response for troubleshooting."""
+
+    _attr_icon = "mdi:bug"
+    _attr_name = "Budget API Debug"
+
+    def __init__(self, coordinator: MonarchCoordinator, unique_id: str) -> None:
+        """Initialize the budget debug sensor."""
+        super().__init__(coordinator, unique_id)
+        self._attr_unique_id = f"{DOMAIN}_{unique_id}_budget_debug"
+        self._raw_json: str = ""
+
+    @callback
+    def _handle_coordinator_update(self) -> None:
+        """Handle updated data from the coordinator."""
+        data = self.coordinator.data
+        if not data or data.budget_raw is None:
+            self._attr_native_value = "No data"
+            self._raw_json = ""
+        else:
+            self._attr_native_value = "Available"
+            try:
+                self._raw_json = json.dumps(data.budget_raw, indent=2)
+            except (TypeError, ValueError) as err:
+                _LOGGER.warning("Failed to serialize budget_raw: %s", err)
+                self._raw_json = str(data.budget_raw)
+
+        self.async_write_ha_state()
+
+    async def async_added_to_hass(self) -> None:
+        """When entity is added to hass."""
+        await super().async_added_to_hass()
+        if self.coordinator.data is not None:
+            self._handle_coordinator_update()
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        """Return the raw API response as JSON string."""
+        return {"raw_response": self._raw_json}

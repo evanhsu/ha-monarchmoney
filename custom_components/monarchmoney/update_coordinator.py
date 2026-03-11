@@ -191,6 +191,7 @@ class MonarchCoordinator(DataUpdateCoordinator[MonarchData]):
             for c in categories_raw.get("categories") or []
         ]
         data.cashflow = CashflowData.from_api(cashflow_raw or {})
+        data.budget_raw = budgets_raw
         data.budget = BudgetData.from_api(budgets_raw or {})
         _LOGGER.debug(
             "Fetched %d accounts, %d categories from API",

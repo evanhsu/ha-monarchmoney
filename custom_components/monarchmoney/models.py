@@ -427,3 +427,4 @@ class MonarchData:
     holdings: list[AccountHoldings] = field(default_factory=list)
     recurring: list[RecurringTransaction] = field(default_factory=list)
     budget: BudgetData | None = None
+    budget_raw: dict | None = None  # Raw get_budgets response for debugging
