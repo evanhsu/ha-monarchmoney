@@ -35,6 +35,7 @@ from .models import (
     BudgetData,
     CashflowData,
     CreditHistory,
+    GoalsData,
     MonarchData,
     RecurringTransaction,
     TransactionCategory,
@@ -193,6 +194,7 @@ class MonarchCoordinator(DataUpdateCoordinator[MonarchData]):
         data.cashflow = CashflowData.from_api(cashflow_raw or {})
         data.budget_raw = budgets_raw
         data.budget = BudgetData.from_api(budgets_raw or {})
+        data.goals = GoalsData.from_api(budgets_raw or {})
         _LOGGER.debug(
             "Fetched %d accounts, %d categories from API",
             len(data.accounts),

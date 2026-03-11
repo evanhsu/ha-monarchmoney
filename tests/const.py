@@ -310,7 +310,7 @@ MOCK_BUDGETS_RESPONSE: dict = {
     "budgetData": {
         "totalsByMonth": [
             {
-                "month": "2026-03",
+                "month": "2026-03-01",
                 "totalFixedExpenses": {
                     "plannedAmount": 2500.00,
                     "actualAmount": 1800.00,
@@ -331,7 +331,21 @@ MOCK_BUDGETS_RESPONSE: dict = {
                 },
             },
         ]
-    }
+    },
+    "goalsV2": [
+        {
+            "id": "goal_1",
+            "name": "Emergency Fund",
+            "archivedAt": None,
+            "completedAt": None,
+            "plannedContributions": [
+                {"id": "pc_1", "month": "2026-03-01", "amount": 500.0},
+            ],
+            "monthlyContributionSummaries": [
+                {"month": "2026-03-01", "sum": 200.0},
+            ],
+        },
+    ],
 }
 
 # ---------------------------------------------------------------------------

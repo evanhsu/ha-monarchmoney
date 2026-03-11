@@ -23,6 +23,7 @@ from .budget import (
     MonarchMoneyBudgetFlexibleRemainingSensor,
     MonarchMoneyBudgetNonMonthlyRemainingSensor,
     MonarchMoneyCheckingBalanceSensor,
+    MonarchMoneyGoalsRemainingSensor,
     MonarchMoneyRequiredCheckingBalanceSensor,
 )
 from .category import MonarchMoneyCategorySensor
@@ -73,6 +74,7 @@ async def async_setup_entry(
     sensors.append(MonarchMoneyBudgetFixedRemainingSensor(coordinator, unique_id))
     sensors.append(MonarchMoneyBudgetFlexibleRemainingSensor(coordinator, unique_id))
     sensors.append(MonarchMoneyBudgetNonMonthlyRemainingSensor(coordinator, unique_id))
+    sensors.append(MonarchMoneyGoalsRemainingSensor(coordinator, unique_id))
     sensors.append(MonarchMoneyRequiredCheckingBalanceSensor(coordinator, unique_id))
     sensors.append(MonarchMoneyBudgetDebugSensor(coordinator, unique_id))
 

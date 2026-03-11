@@ -10,6 +10,7 @@ from custom_components.monarchmoney.models import (
     BudgetMonthTotals,
     CashflowData,
     CreditHistory,
+    GoalsData,
     Holding,
     HouseholdUser,
     Institution,
@@ -248,6 +249,32 @@ class TestBudgetData:
         assert bd.totals_by_month == {}
 
 
+class TestGoalsData:
+    def test_from_api(self) -> None:
+        gd = GoalsData.from_api(MOCK_BUDGETS_RESPONSE)
+        # Emergency Fund: planned 500 - actual 200 = 300 remaining
+        assert "2026-03" in gd.remaining_by_month
+        assert gd.remaining_by_month["2026-03"] == 300.0
+
+    def test_empty_goals(self) -> None:
+        gd = GoalsData.from_api({"goalsV2": []})
+        assert gd.remaining_by_month == {}
+
+    def test_skips_archived_goals(self) -> None:
+        gd = GoalsData.from_api({
+            "goalsV2": [
+                {
+                    "id": "g1",
+                    "archivedAt": "2026-01-01",
+                    "completedAt": None,
+                    "plannedContributions": [{"month": "2026-03-01", "amount": 100}],
+                    "monthlyContributionSummaries": [],
+                },
+            ],
+        })
+        assert gd.remaining_by_month == {}
+
+
 # ---------------------------------------------------------------------------
 # MonarchData container
 # ---------------------------------------------------------------------------
@@ -262,3 +289,4 @@ class TestMonarchData:
         assert d.holdings == []
         assert d.recurring == []
         assert d.budget is None
+        assert d.goals is None

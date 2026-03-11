@@ -404,8 +404,63 @@ class BudgetData:
         for item in totals_raw:
             month_totals = BudgetMonthTotals.from_api(item)
             if month_totals.month:
-                totals_by_month[month_totals.month] = month_totals
+                # API returns "YYYY-MM-DD" (e.g. "2026-03-01"); normalize to "YYYY-MM"
+                month_key = (
+                    month_totals.month[:7]
+                    if len(month_totals.month) >= 7
+                    else month_totals.month
+                )
+                totals_by_month[month_key] = month_totals
         return cls(totals_by_month=totals_by_month)
+
+
+@dataclass(frozen=True, slots=True)
+class GoalsData:
+    """Goals V2 data from get_budgets response.
+
+    Computes remaining = planned - actual for each month across all goals.
+    """
+
+    remaining_by_month: dict[str, float]
+
+    @classmethod
+    def from_api(cls, data: dict[str, Any]) -> GoalsData:
+        """Parse goalsV2 from get_budgets response and compute remaining per month."""
+        goals_raw = data.get("goalsV2") or []
+        remaining_by_month: dict[str, float] = {}
+
+        for goal in goals_raw:
+            if goal.get("archivedAt") or goal.get("completedAt"):
+                continue
+            planned_list = goal.get("plannedContributions") or []
+            actual_list = goal.get("monthlyContributionSummaries") or []
+
+            planned_by_month: dict[str, float] = {}
+            for pc in planned_list:
+                month_str = pc.get("month") or ""
+                month_key = month_str[:7] if len(month_str) >= 7 else month_str
+                if month_key:
+                    planned_by_month[month_key] = (
+                        planned_by_month.get(month_key, 0.0)
+                        + (pc.get("amount") or 0.0)
+                    )
+
+            actual_by_month: dict[str, float] = {}
+            for ms in actual_list:
+                month_str = ms.get("month") or ""
+                month_key = month_str[:7] if len(month_str) >= 7 else month_str
+                if month_key:
+                    actual_by_month[month_key] = ms.get("sum") or 0.0
+
+            for month_key in set(planned_by_month) | set(actual_by_month):
+                planned = planned_by_month.get(month_key, 0.0)
+                actual = actual_by_month.get(month_key, 0.0)
+                remaining = planned - actual
+                remaining_by_month[month_key] = (
+                    remaining_by_month.get(month_key, 0.0) + remaining
+                )
+
+        return cls(remaining_by_month=remaining_by_month)
 
 
 # ---------------------------------------------------------------------------
@@ -427,4 +482,5 @@ class MonarchData:
     holdings: list[AccountHoldings] = field(default_factory=list)
     recurring: list[RecurringTransaction] = field(default_factory=list)
     budget: BudgetData | None = None
+    goals: GoalsData | None = None
     budget_raw: dict | None = None  # Raw get_budgets response for debugging

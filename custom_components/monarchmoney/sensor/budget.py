@@ -92,6 +92,15 @@ def _get_current_month_totals(coordinator: MonarchCoordinator) -> Any:
     return data.budget.totals_by_month.get(current_month)
 
 
+def _get_goals_remaining(coordinator: MonarchCoordinator) -> float:
+    """Get sum of goals remaining for the current month."""
+    data = coordinator.data
+    if not data or not data.goals:
+        return 0.0
+    current_month = datetime.now().strftime("%Y-%m")
+    return data.goals.remaining_by_month.get(current_month, 0.0)
+
+
 class MonarchMoneyBudgetFixedRemainingSensor(MonarchSensorEntity):
     """Budget remaining for fixed expenses this month."""
 
@@ -230,8 +239,32 @@ class MonarchMoneyBudgetNonMonthlyRemainingSensor(MonarchSensorEntity):
         }
 
 
+class MonarchMoneyGoalsRemainingSensor(MonarchSensorEntity):
+    """Sum of goals remaining (planned - actual) for the current month."""
+
+    def __init__(self, coordinator: MonarchCoordinator, unique_id: str) -> None:
+        """Initialize the goals remaining sensor."""
+        super().__init__(coordinator, unique_id)
+        self._attr_name = "Goals Remaining"
+        self._attr_unique_id = f"{DOMAIN}_{unique_id}_goals_remaining"
+        self._attr_icon = "mdi:target"
+
+    @callback
+    def _handle_coordinator_update(self) -> None:
+        """Handle updated data from the coordinator."""
+        goals_remaining = _get_goals_remaining(self.coordinator)
+        self._state = round(goals_remaining, 2)
+        self.async_write_ha_state()
+
+    async def async_added_to_hass(self) -> None:
+        """When entity is added to hass."""
+        await super().async_added_to_hass()
+        if self.coordinator.data is not None:
+            self._handle_coordinator_update()
+
+
 class MonarchMoneyRequiredCheckingBalanceSensor(MonarchSensorEntity):
-    """Required checking balance: credit cards + fixed + flexible budget remaining."""
+    """Required checking balance: credit cards + fixed + flexible budget + goals remaining."""
 
     def __init__(self, coordinator: MonarchCoordinator, unique_id: str) -> None:
         """Initialize the required checking balance sensor."""
@@ -239,6 +272,7 @@ class MonarchMoneyRequiredCheckingBalanceSensor(MonarchSensorEntity):
         self._credit_card_balance: float | None = None
         self._budget_fixed_remaining: float | None = None
         self._budget_flexible_remaining: float | None = None
+        self._goals_remaining: float | None = None
         self._attr_name = "Required Checking Balance"
         self._attr_unique_id = f"{DOMAIN}_{unique_id}_required_checking_balance"
         self._attr_icon = "mdi:bank-transfer"
@@ -275,11 +309,19 @@ class MonarchMoneyRequiredCheckingBalanceSensor(MonarchSensorEntity):
         fixed_remaining = totals.remaining_fixed if totals else 0.0
         flexible_remaining = totals.remaining_flexible if totals else 0.0
 
+        # Goals remaining
+        goals_remaining = _get_goals_remaining(self.coordinator)
+
         self._budget_fixed_remaining = round(fixed_remaining, 2)
         self._budget_flexible_remaining = round(flexible_remaining, 2)
+        self._goals_remaining = round(goals_remaining, 2)
 
         self._state = round(
-            credit_balance + fixed_remaining + flexible_remaining, 2
+            credit_balance
+            + fixed_remaining
+            + flexible_remaining
+            + goals_remaining,
+            2,
         )
 
         self.async_write_ha_state()
@@ -297,6 +339,7 @@ class MonarchMoneyRequiredCheckingBalanceSensor(MonarchSensorEntity):
             "credit_card_balance": self._credit_card_balance,
             "budget_fixed_remaining": self._budget_fixed_remaining,
             "budget_flexible_remaining": self._budget_flexible_remaining,
+            "goals_remaining": self._goals_remaining,
         }
 
 
